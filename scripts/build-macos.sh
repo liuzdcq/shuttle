@@ -22,8 +22,8 @@ xcodebuild -project "$project_root/Shuttle.xcodeproj" -scheme Shuttle \
 
 application="$output_directory/Build/Products/Release/Shuttle.app"
 executable="$application/Contents/MacOS/Shuttle"
-/usr/bin/lipo -verify_arch "${architectures[@]}" "$executable"
-/usr/bin/lipo -archs "$executable"
+/usr/bin/lipo "$executable" -verify_arch "${architectures[@]}"
+/usr/bin/lipo "$executable" -archs
 
 # Ad-hoc signing is enough for a local source build, including Apple silicon.
 # A Developer ID identity can be supplied for distribution; notarize separately.
