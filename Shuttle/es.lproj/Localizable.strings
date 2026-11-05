@@ -7,3 +7,12 @@
 "About " = "Acerca ";
 "Version: " = "Versión: ";
 " - A simple SSH shortcut menu." = " - Un SSH menu simple de shortcuts (atajos).";
+
+/* Programmatic status menu */
+"Settings" = "Configuración";
+"Edit" = "Editar";
+"Export" = "Exportar";
+"Import" = "Importar";
+"About" = "Acerca de";
+"Quit" = "Cerrar";
+"Error parsing config" = "Error de configuración";

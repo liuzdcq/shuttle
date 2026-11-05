@@ -5,6 +5,14 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+- Modern macOS branch: native arm64 and universal builds, macOS 13 minimum,
+  verified build architectures and local signing, plus a shared Xcode scheme.
+- Replace legacy nib startup and login-item APIs with programmatic AppKit menus
+  and ServiceManagement's SMAppService.
+- Keep configuration errors recoverable, preserve structured command parameters,
+  detect absolute URLs correctly, and report AppleScript permission errors.
+- Add native startup/regression tests and a macOS build workflow. Runtime testing
+  on macOS 27.2 is still required before declaring that version supported.
 - The ability to open multiple, or same command(s) off one menu item. https://github.com/fitztrev/shuttle/issues/236
 - The ability to add a second json.config file 
 - The ability to add ```[---]``` in the name of a command to add a line seperator 

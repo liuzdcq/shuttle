@@ -23,100 +23,30 @@
 //  SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #import "LaunchAtLoginController.h"
-
-static NSString *const StartAtLoginKey = @"launchAtLogin";
-
-@interface LaunchAtLoginController ()
-@property(assign) LSSharedFileListRef loginItems;
-@end
+#import <ServiceManagement/ServiceManagement.h>
 
 @implementation LaunchAtLoginController
-@synthesize loginItems;
 
-#pragma mark Change Observing
-
-void sharedFileListDidChange(LSSharedFileListRef inList, void *context)
+- (BOOL)launchAtLogin
 {
-    LaunchAtLoginController *self = (id) context;
-    [self willChangeValueForKey:StartAtLoginKey];
-    [self didChangeValueForKey:StartAtLoginKey];
+    return SMAppService.mainAppService.status == SMAppServiceStatusEnabled;
 }
 
-#pragma mark Initialization
-
-- (id) init
+- (BOOL)setEnabled:(BOOL)enabled error:(NSError **)error
 {
-    [super init];
-    loginItems = LSSharedFileListCreate(NULL, kLSSharedFileListSessionLoginItems, NULL);
-    LSSharedFileListAddObserver(loginItems, CFRunLoopGetMain(),
-                                (CFStringRef)NSDefaultRunLoopMode, sharedFileListDidChange, self);
-    return self;
+    SMAppService *service = SMAppService.mainAppService;
+    SMAppServiceStatus status = service.status;
+    // Respect a pending approval instead of re-registering on every menu open.
+    if (enabled && (status == SMAppServiceStatusEnabled || status == SMAppServiceStatusRequiresApproval)) return YES;
+    if (!enabled && (status == SMAppServiceStatusNotRegistered || status == SMAppServiceStatusNotFound)) return YES;
+    return enabled ? [service registerAndReturnError:error] : [service unregisterAndReturnError:error];
 }
 
-- (void) dealloc
+- (void)setLaunchAtLogin:(BOOL)enabled
 {
-    LSSharedFileListRemoveObserver(loginItems, CFRunLoopGetMain(),
-                                   (CFStringRef)NSDefaultRunLoopMode, sharedFileListDidChange, self);
-    CFRelease(loginItems);
-    [super dealloc];
-}
-
-#pragma mark Launch List Control
-
-- (LSSharedFileListItemRef) findItemWithURL: (NSURL*) wantedURL inFileList: (LSSharedFileListRef) fileList
-{
-    if (wantedURL == NULL || fileList == NULL)
-        return NULL;
-    
-    NSArray *listSnapshot = [NSMakeCollectable(LSSharedFileListCopySnapshot(fileList, NULL)) autorelease];
-    for (id itemObject in listSnapshot) {
-        LSSharedFileListItemRef item = (LSSharedFileListItemRef) itemObject;
-        UInt32 resolutionFlags = kLSSharedFileListNoUserInteraction | kLSSharedFileListDoNotMountVolumes;
-        CFURLRef currentItemURL = NULL;
-        LSSharedFileListItemResolve(item, resolutionFlags, &currentItemURL, NULL);
-        if (currentItemURL && CFEqual(currentItemURL, wantedURL)) {
-            CFRelease(currentItemURL);
-            return item;
-        }
-        if (currentItemURL)
-            CFRelease(currentItemURL);
+    NSError *error = nil;
+    if (![self setEnabled:enabled error:&error]) {
+        NSLog(@"Cannot update launch at login: %@", error.localizedDescription);
     }
-    
-    return NULL;
 }
-
-- (BOOL) willLaunchAtLogin: (NSURL*) itemURL
-{
-    return !![self findItemWithURL:itemURL inFileList:loginItems];
-}
-
-- (void) setLaunchAtLogin: (BOOL) enabled forURL: (NSURL*) itemURL
-{
-    LSSharedFileListItemRef appItem = [self findItemWithURL:itemURL inFileList:loginItems];
-    if (enabled && !appItem) {
-        LSSharedFileListInsertItemURL(loginItems, kLSSharedFileListItemBeforeFirst,
-                                      NULL, NULL, (CFURLRef)itemURL, NULL, NULL);
-    } else if (!enabled && appItem)
-        LSSharedFileListItemRemove(loginItems, appItem);
-}
-
-#pragma mark Basic Interface
-
-- (NSURL*) appURL
-{
-    return [NSURL fileURLWithPath:[[NSBundle mainBundle] bundlePath]];
-}
-
-- (void) setLaunchAtLogin: (BOOL) enabled
-{
-    [self willChangeValueForKey:StartAtLoginKey];
-    [self setLaunchAtLogin:enabled forURL:[self appURL]];
-    [self didChangeValueForKey:StartAtLoginKey];
-}
-
-- (BOOL) launchAtLogin
-{
-    return [self willLaunchAtLogin:[self appURL]];
-}
-
 @end

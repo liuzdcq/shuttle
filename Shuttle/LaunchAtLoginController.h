@@ -22,11 +22,12 @@
 //  TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
 //  SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-@interface LaunchAtLoginController : NSObject {}
+#import <Foundation/Foundation.h>
+
+@interface LaunchAtLoginController : NSObject
 
 @property(assign) BOOL launchAtLogin;
 
-- (BOOL) willLaunchAtLogin: (NSURL*) itemURL;
-- (void) setLaunchAtLogin: (BOOL) enabled forURL: (NSURL*) itemURL;
+- (BOOL)setEnabled:(BOOL)enabled error:(NSError **)error;
 
 @end
