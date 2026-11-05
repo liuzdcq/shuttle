@@ -8,3 +8,11 @@
 "Version: " = "Version: ";
 " - A simple SSH shortcut menu." = " - Le gestionnaire de raccourcis SSH.";
 "Error parsing config" = "Fichier de paramétrage invalide";
+
+/* Programmatic status menu */
+"Settings" = "Réglages";
+"Edit" = "Modifier";
+"Export" = "Exporter";
+"Import" = "Importer";
+"About" = "À propos";
+"Quit" = "Quitter";

@@ -17,9 +17,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.3.0</string>
+	<string>1.4.0</string>
 	<key>CFBundleVersion</key>
-	<string>1.3.0</string>
+	<string>1.4.0</string>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.developer-tools</string>
 	<key>LSMinimumSystemVersion</key>
@@ -27,11 +27,9 @@
 	<key>LSUIElement</key>
 	<true/>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>Shuttle needs Automation privileges in Security &amp; Privacy to run applescripts</string>
+	<string>Shuttle sends your commands to Terminal or iTerm and uses System Events to open Terminal tabs.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Copyright © 2016 Trevor Fitzgerald. All rights reserved.</string>
-	<key>NSMainNibFile</key>
-	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 	<key>Product Homepage</key>

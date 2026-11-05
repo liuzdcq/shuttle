@@ -1,0 +1,31 @@
+name: macOS native builds
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Report toolchain and host architecture
+        run: |
+          sw_vers
+          uname -m
+          xcodebuild -version
+      - name: Run native startup and regression tests
+        run: bash scripts/test-macos.sh
+      - name: Build and verify arm64 application
+        run: bash scripts/build-macos.sh arm64
+      - name: Build and verify universal application
+        run: bash scripts/build-macos.sh universal
+      - uses: actions/upload-artifact@v6
+        with:
+          name: Shuttle-macOS
+          path: build/*/Shuttle-*.zip
+          if-no-files-found: error

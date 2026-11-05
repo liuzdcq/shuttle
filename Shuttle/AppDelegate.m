@@ -4,15 +4,65 @@
 //
 
 #import "AppDelegate.h"
-#import "AboutWindowController.h"
+#import <glob.h>
 
 @implementation AppDelegate
 
-- (void) awakeFromNib {
+- (instancetype)init
+{
+    return [self initWithHomeDirectory:NSHomeDirectory()];
+}
+
+- (instancetype)initWithHomeDirectory:(NSString *)homeDirectory
+{
+    self = [super init];
+    if (self) configurationHomeDirectory = [homeDirectory copy];
+    return self;
+}
+
+- (NSString *)expandedConfigurationPath:(NSString *)path
+{
+    if ([path hasPrefix:@"~/"]) {
+        return [configurationHomeDirectory stringByAppendingPathComponent:[path substringFromIndex:2]];
+    }
+    path = [path stringByExpandingTildeInPath];
+    return path.isAbsolutePath ? path : [configurationHomeDirectory stringByAppendingPathComponent:path];
+}
+
+- (NSMenuItem *)itemWithTitle:(NSString *)title action:(SEL)action
+{
+    NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:NSLocalizedString(title, nil) action:action keyEquivalent:@""];
+    item.target = self;
+    return item;
+}
+
+- (void)applicationDidFinishLaunching:(NSNotification *)notification {
+    // Build the menu without depending on pre-Apple-silicon Interface Builder archives.
+    menu = [[NSMenu alloc] initWithTitle:@"Shuttle"];
+    [menu addItem:NSMenuItem.separatorItem];
+    NSMenuItem *settings = [self itemWithTitle:@"Settings" action:NULL];
+    settings.submenu = [[NSMenu alloc] initWithTitle:settings.title];
+    [settings.submenu addItem:[self itemWithTitle:@"Edit" action:@selector(configure:)]];
+    [settings.submenu addItem:[self itemWithTitle:@"Export" action:@selector(showExportPanel:)]];
+    [settings.submenu addItem:[self itemWithTitle:@"Import" action:@selector(showImportPanel:)]];
+    [menu addItem:settings];
+    [menu addItem:[self itemWithTitle:@"About" action:@selector(showAbout:)]];
+    [menu addItem:[self itemWithTitle:@"Quit" action:@selector(quit:)]];
+    permanentMenuItemCount = menu.numberOfItems;
+
+    NSMenu *mainMenu = [[NSMenu alloc] initWithTitle:@"Shuttle"];
+    NSMenuItem *applicationItem = [[NSMenuItem alloc] init];
+    applicationItem.submenu = [[NSMenu alloc] initWithTitle:@"Shuttle"];
+    [applicationItem.submenu addItem:[self itemWithTitle:@"About" action:@selector(showAbout:)]];
+    NSMenuItem *quit = [self itemWithTitle:@"Quit" action:@selector(quit:)];
+    quit.keyEquivalent = @"q";
+    [applicationItem.submenu addItem:quit];
+    [mainMenu addItem:applicationItem];
+    NSApp.mainMenu = mainMenu;
     
     // The location for the JSON path file. This is a simple file that contains the hard path to the *.json settings file.
-    shuttleJSONPathPref = [NSHomeDirectory() stringByAppendingPathComponent:@".shuttle.path"];
-    shuttleJSONPathAlt = [NSHomeDirectory() stringByAppendingPathComponent:@".shuttle-alt.path"];
+    shuttleJSONPathPref = [configurationHomeDirectory stringByAppendingPathComponent:@".shuttle.path"];
+    shuttleJSONPathAlt = [configurationHomeDirectory stringByAppendingPathComponent:@".shuttle-alt.path"];
     
     //if file shuttle.path exists in ~/.shuttle.path then read this file as it should contain the custom path to *.json
     if( [[NSFileManager defaultManager] fileExistsAtPath:shuttleJSONPathPref] ) {
@@ -23,15 +73,17 @@
         //Remove the white space if any.
         jsonConfigPath = [ jsonConfigPath stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
         
-        shuttleConfigFile = jsonConfigPath;
+        shuttleConfigFile = jsonConfigPath.length ? [self expandedConfigurationPath:jsonConfigPath] : @"";
     }else{
         // The path for the configuration file (by default: ~/.shuttle.json)
-        shuttleConfigFile = [NSHomeDirectory() stringByAppendingPathComponent:@".shuttle.json"];
+        shuttleConfigFile = [configurationHomeDirectory stringByAppendingPathComponent:@".shuttle.json"];
         
         // if the config file does not exist, create a default one
         if ( ![[NSFileManager defaultManager] fileExistsAtPath:shuttleConfigFile] ) {
             NSString *cgFileInResource = [[NSBundle mainBundle] pathForResource:@"shuttle.default" ofType:@"json"];
-            [[NSFileManager defaultManager] copyItemAtPath:cgFileInResource toPath:shuttleConfigFile error:nil];
+            if (cgFileInResource) {
+                [[NSFileManager defaultManager] copyItemAtPath:cgFileInResource toPath:shuttleConfigFile error:nil];
+            }
         }
     }
     
@@ -45,13 +97,13 @@
         jsonConfigAltPath = [ jsonConfigAltPath stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
         
         //set the global var that contains the alternate path
-        shuttleAltConfigFile = jsonConfigAltPath;
+        shuttleAltConfigFile = jsonConfigAltPath.length ? [self expandedConfigurationPath:jsonConfigAltPath] : @"";
         
         //flag the bool for later parsing
         parseAltJSON = YES;
     }else{
         //the custom alt path does not exist. Assume the default for alt path; if existing flag for later parsing
-        shuttleAltConfigFile = [NSHomeDirectory() stringByAppendingPathComponent:@".shuttle-alt.json"];
+        shuttleAltConfigFile = [configurationHomeDirectory stringByAppendingPathComponent:@".shuttle-alt.json"];
         
         if ( [[NSFileManager defaultManager] fileExistsAtPath:shuttleAltConfigFile] ){
             //the default path exists. Flag for later parsing
@@ -62,95 +114,165 @@
         }
     }
     
-    // Define Icons
-    //only regular icon is needed for 10.10 and higher. OS X changes the icon for us.
     regularIcon = [NSImage imageNamed:@"StatusIcon"];
-    altIcon = [NSImage imageNamed:@"StatusIconAlt"];
-    
-    // Create the status bar item
+    regularIcon.template = YES;
     statusItem = [[NSStatusBar systemStatusBar] statusItemWithLength:NSSquareStatusItemLength];
-    [statusItem setMenu:menu];
-    [statusItem setImage: regularIcon];
-    
-    // Check for AppKit Version, add support for darkmode if > 10.9
-    BOOL oldAppKitVersion = (floor(NSAppKitVersionNumber) <= 1265);
-    
-    // 10.10 or higher, dont load the alt image let OS X style it.
-    if (!oldAppKitVersion)
-    {
-        regularIcon.template = YES;
-    }
-    // Load the alt image for OS X < 10.10
-    else{
-        [statusItem setHighlightMode:YES];
-        [statusItem setAlternateImage: altIcon];
-    }
-    
+    statusItem.menu = menu;
+    statusItem.button.image = regularIcon;
+    statusItem.button.toolTip = @"Shuttle";
+    // Retain an accessible way to open settings even if an icon resource is missing.
+    if (!regularIcon) statusItem.button.title = @">_";
     launchAtLoginController = [[LaunchAtLoginController alloc] init];
-    // Needed to trigger the menuWillOpen event
-    [menu setDelegate:self];
+    menu.delegate = self;
+    [self loadMenu];
 }
 
-- (BOOL) needUpdateFor: (NSString*) file with: (NSDate*) old {
-    
-    if (![[NSFileManager defaultManager] fileExistsAtPath:[file stringByExpandingTildeInPath]])
-        return false;
-    
-    if (old == NULL)
-        return true;
-    
-    NSDate *date = [self getMTimeFor:file];
-    return [date compare: old] == NSOrderedDescending;
+- (void)applicationWillTerminate:(NSNotification *)notification
+{
+    if (statusItem) [[NSStatusBar systemStatusBar] removeStatusItem:statusItem];
 }
 
-- (NSDate*) getMTimeFor: (NSString*) file {
-    NSDictionary *attributes = [[NSFileManager defaultManager] attributesOfItemAtPath:[file stringByExpandingTildeInPath]
-                                                                                error:nil];
-    return [attributes fileModificationDate];
+- (void)menuWillOpen:(NSMenu *)openingMenu
+{
+    [self loadMenu];
 }
 
-- (void)menuWillOpen:(NSMenu *)menu {
-    // Check when the config was last modified
-    if ( [self needUpdateFor:shuttleConfigFile with:configModified] ||
-        [self needUpdateFor:shuttleAltConfigFile with:configModified2] ||
-        [self needUpdateFor: @"/etc/ssh/ssh_config" with:sshConfigSystem] ||
-        [self needUpdateFor: @"~/.ssh/config" with:sshConfigUser]) {
-        
-        configModified = [self getMTimeFor:shuttleConfigFile];
-        configModified2 = [self getMTimeFor:shuttleAltConfigFile];
-        sshConfigSystem = [self getMTimeFor: @"/etc/ssh/ssh_config"];
-        sshConfigUser = [self getMTimeFor: @"~/.ssh/config"];
-        
-        [self loadMenu];
+- (BOOL)configurationError:(NSString *)message error:(NSError **)error
+{
+    if (error) *error = [NSError errorWithDomain:@"Shuttle.Configuration" code:1
+                                      userInfo:@{NSLocalizedDescriptionKey: message}];
+    return NO;
+}
+
+- (BOOL)validateHosts:(id)hosts depth:(NSUInteger)depth error:(NSError **)error
+{
+    if (![hosts isKindOfClass:NSArray.class] || depth > 32) {
+        return [self configurationError:@"hosts and submenus must be arrays, nested at most 32 levels deep." error:error];
     }
+    for (id item in hosts) {
+        if (![item isKindOfClass:NSDictionary.class]) {
+            return [self configurationError:@"Every hosts entry must be an object." error:error];
+        }
+        if (item[@"cmd"] || item[@"name"]) {
+            for (NSString *key in @[@"cmd", @"name", @"theme", @"title", @"inTerminal"]) {
+                id value = item[key];
+                BOOL required = [key isEqual:@"cmd"] || [key isEqual:@"name"];
+                if ((value && ![value isKindOfClass:NSString.class]) || (required && ![value length])) {
+                    return [self configurationError:[NSString stringWithFormat:@"%@ must be a string; name and cmd cannot be empty.", key] error:error];
+                }
+            }
+            if (item[@"inTerminal"] && ![@[@"new", @"tab", @"current", @"virtual"] containsObject:item[@"inTerminal"]]) {
+                return [self configurationError:@"inTerminal must be new, tab, current, or virtual." error:error];
+            }
+        } else {
+            for (NSString *key in item) {
+                if (![self validateHosts:item[key] depth:depth + 1 error:error]) return NO;
+            }
+        }
+    }
+    return YES;
+}
+
+- (NSMutableDictionary *)readConfigurationAtPath:(NSString *)path error:(NSError **)error
+{
+    if (!path.length) {
+        [self configurationError:@"The .shuttle.path or .shuttle-alt.path file is empty or unreadable." error:error];
+        return nil;
+    }
+    NSData *data = [NSData dataWithContentsOfFile:path options:0 error:error];
+    if (!data) return nil;
+    id json = [NSJSONSerialization JSONObjectWithData:data options:NSJSONReadingMutableContainers error:error];
+    if (!json) return nil;
+    if (![json isKindOfClass:NSDictionary.class]) {
+        [self configurationError:@"The configuration must be a JSON object." error:error];
+        return nil;
+    }
+    for (NSString *key in @[@"terminal", @"editor", @"iTerm_version", @"open_in", @"default_theme"]) {
+        if (json[key] && ![json[key] isKindOfClass:NSString.class]) {
+            [self configurationError:[NSString stringWithFormat:@"%@ must be a string.", key] error:error];
+            return nil;
+        }
+    }
+    for (NSString *key in @[@"launch_at_login", @"show_ssh_config_hosts"]) {
+        if (json[key] && ![json[key] isKindOfClass:NSNumber.class]) {
+            [self configurationError:[NSString stringWithFormat:@"%@ must be a JSON boolean.", key] error:error];
+            return nil;
+        }
+    }
+    for (NSString *key in @[@"ssh_config_ignore_hosts", @"ssh_config_ignore_keywords"]) {
+        if (json[key] && ![json[key] isKindOfClass:NSArray.class]) {
+            [self configurationError:[NSString stringWithFormat:@"%@ must be an array of strings.", key] error:error];
+            return nil;
+        }
+        for (id value in json[key]) {
+            if (![value isKindOfClass:NSString.class]) {
+                [self configurationError:[NSString stringWithFormat:@"%@ must contain only strings.", key] error:error];
+                return nil;
+            }
+        }
+    }
+    if (!json[@"hosts"]) json[@"hosts"] = [NSMutableArray array];
+    return [self validateHosts:json[@"hosts"] depth:0 error:error] ? json : nil;
+}
+
+- (void)showConfigurationError:(NSError *)error
+{
+    NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:NSLocalizedString(@"Error parsing config", nil)
+                                               action:NULL keyEquivalent:@""];
+    item.enabled = NO;
+    item.toolTip = error.localizedDescription;
+    [menu insertItem:item atIndex:0];
+    NSLog(@"Cannot load Shuttle configuration: %@", error.localizedDescription);
+}
+
+- (void)showError:(NSString *)title details:(NSString *)details
+{
+    [NSApp activateIgnoringOtherApps:YES];
+    NSAlert *alert = [[NSAlert alloc] init];
+    alert.messageText = NSLocalizedString(title, nil);
+    alert.informativeText = details ?: @"Unknown error";
+    alert.alertStyle = NSAlertStyleWarning;
+    [alert runModal];
+}
+
+- (void)showScriptError:(NSDictionary *)error
+{
+    NSString *details = error[NSAppleScriptErrorMessage] ?: @"The terminal script could not be loaded or executed.";
+    if ([error[NSAppleScriptErrorNumber] integerValue] == -1743) {
+        details = [details stringByAppendingString:@"\n\nAllow Shuttle to control Terminal or iTerm in System Settings > Privacy & Security > Automation."];
+    }
+    details = [details stringByAppendingString:@"\n\nTerminal's new-tab mode also requires Shuttle in Privacy & Security > Accessibility. You can use open_in: new without that permission."];
+    [self showError:@"Unable to run terminal command" details:details];
+}
+
+- (NSURL *)commandURL:(NSString *)command
+{
+    NSURL *url = [NSURL URLWithString:command];
+    // Modern Foundation accepts relative strings (and even spaces) as URLs.
+    // Only an explicit scheme makes a command a URL rather than shell text.
+    return url.scheme.length ? url : nil;
 }
 
 // Parsing of the SSH Config File
 // Courtesy of https://gist.github.com/geeksunny/3376694
 - (NSDictionary<NSString *, NSDictionary *> *)parseSSHConfigFile {
     
-    NSString *configFile = nil;
-    NSFileManager *fileMgr = [[NSFileManager alloc] init];
-    
-    // First check the system level configuration
-    if ([fileMgr fileExistsAtPath: @"/etc/ssh_config"]) {
-        configFile = @"/etc/ssh_config";
-    }
-    
-    // Fallback to check if actually someone used /etc/ssh/ssh_config
-    if ([fileMgr fileExistsAtPath: [@"~/.ssh/config" stringByExpandingTildeInPath]]) {
-        configFile = [@"~/.ssh/config" stringByExpandingTildeInPath];
-    }
-    
-    if (configFile == nil) {
-        // We did not find any config file so we gracefully die
-        return nil;
-    }
-    return [self parseSSHConfig:configFile];
+    NSMutableDictionary *servers = [NSMutableDictionary dictionary];
+    [servers addEntriesFromDictionary:[self parseSSHConfig:@"/etc/ssh/ssh_config"]];
+    [servers addEntriesFromDictionary:[self parseSSHConfig:[configurationHomeDirectory stringByAppendingPathComponent:@".ssh/config"]]];
+    return servers;
 }
 
 - (NSDictionary<NSString *, NSDictionary *> *)parseSSHConfig:(NSString *)filepath {
-    // Get file contents into fh.
+    return [self parseSSHConfig:filepath visiting:[NSMutableSet set]];
+}
+
+- (NSDictionary *)parseSSHConfig:(NSString *)filepath visiting:(NSMutableSet *)visiting
+{
+    filepath = [[filepath stringByStandardizingPath] stringByResolvingSymlinksInPath];
+    if ([visiting containsObject:filepath] || visiting.count >= 32) return @{};
+    [visiting addObject:filepath];
+    // Missing files and unmatched Include patterns are allowed by OpenSSH.
     NSString *fh = [NSString stringWithContentsOfFile:filepath encoding:NSUTF8StringEncoding error:nil];
     
     // build the regex for matching
@@ -191,71 +313,82 @@
             continue;
         }
         
-        if ([first isEqualToString:@"Include"]) {
+        if ([first caseInsensitiveCompare:@"Include"] == NSOrderedSame) {
             // Support for ssh_config Include directive.
-            NSString *includePath = ([second isAbsolutePath])
-                ? [second stringByExpandingTildeInPath]
-                : [[filepath stringByDeletingLastPathComponent] stringByAppendingPathComponent:second];
-            
-            [servers addEntriesFromDictionary:[self parseSSHConfig:includePath]];
+            // Resolve Include globs and prevent self-includes from recursing forever.
+            for (NSString *pattern in [second componentsSeparatedByCharactersInSet:NSCharacterSet.whitespaceCharacterSet]) {
+                if (!pattern.length) continue;
+                NSString *expanded = [pattern stringByExpandingTildeInPath];
+                NSString *includePath = expanded.isAbsolutePath ? expanded :
+                    [[filepath stringByDeletingLastPathComponent] stringByAppendingPathComponent:expanded];
+                glob_t paths = {0};
+                if (glob(includePath.fileSystemRepresentation, 0, NULL, &paths) == 0) {
+                    for (size_t i = 0; i < paths.gl_pathc; i++) {
+                        NSString *included = [NSString stringWithUTF8String:paths.gl_pathv[i]];
+                        [servers addEntriesFromDictionary:[self parseSSHConfig:included visiting:visiting]];
+                    }
+                }
+                globfree(&paths);
+            }
         }
-        
-        if ([first isEqualToString:@"Host"]) {
+
+        if ([first caseInsensitiveCompare:@"Host"] == NSOrderedSame) {
             // a new host section
             
             // split multiple aliases on space and only save the first
             NSArray* hostAliases = [second componentsSeparatedByCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
             hostAliases = [hostAliases filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"SELF != ''"]];
             key = [hostAliases firstObject];
-            servers[key] = [[NSMutableDictionary alloc] init];
+            if (key.length) servers[key] = [[NSMutableDictionary alloc] init];
         }
     }
     
+    [visiting removeObject:filepath];
     return servers;
 }
 
 
 - (void) loadMenu {
-    // Clear out the hosts so we can start over
-    NSUInteger n = [[menu itemArray] count];
-    for (int i=0;i<n-4;i++) {
-        [menu removeItemAtIndex:0];
-    }
-    
-    // Parse the config file
-    NSData *data = [NSData dataWithContentsOfFile:shuttleConfigFile];
-    id json = [NSJSONSerialization JSONObjectWithData:data
-                                              options:NSJSONReadingMutableContainers
-                                                error:nil];
-    // Check valid JSON syntax
-    if ( !json ) {
-        NSMenuItem *menuItem = [menu insertItemWithTitle:NSLocalizedString(@"Error parsing config",nil)
-                                                  action:false
-                                           keyEquivalent:@""
-                                                 atIndex:0
-                                ];
-        [menuItem setEnabled:false];
+    while (menu.numberOfItems > permanentMenuItemCount) [menu removeItemAtIndex:0];
+    NSError *error = nil;
+    NSMutableDictionary *json = [self readConfigurationAtPath:shuttleConfigFile error:&error];
+    if (!json) {
+        [self showConfigurationError:error];
         return;
     }
-    
-    terminalPref = [json[@"terminal"] lowercaseString];
-    editorPref = [json[@"editor"] lowercaseString];
-    iTermVersionPref = [json[@"iTerm_version"] lowercaseString];
-    openInPref = [json[@"open_in"] lowercaseString];
+    terminalPref = [json[@"terminal"] lowercaseString] ?: @"terminal.app";
+    editorPref = json[@"editor"] ?: @"default";
+    iTermVersionPref = [json[@"iTerm_version"] lowercaseString] ?: @"stable";
+    openInPref = [json[@"open_in"] lowercaseString] ?: @"tab";
     themePref = json[@"default_theme"];
-    launchAtLoginController.launchAtLogin = [json[@"launch_at_login"] boolValue];
     shuttleHosts = json[@"hosts"];
     ignoreHosts = json[@"ssh_config_ignore_hosts"];
     ignoreKeywords = json[@"ssh_config_ignore_keywords"];
-    
-    //add hosts from the alternate json config
+
+    // Re-evaluate the optional file so adding or deleting it takes effect immediately.
+    parseAltJSON = [[NSFileManager defaultManager] fileExistsAtPath:shuttleAltConfigFile] ||
+        [[NSFileManager defaultManager] fileExistsAtPath:shuttleJSONPathAlt];
     if (parseAltJSON) {
-        NSData *dataAlt = [NSData dataWithContentsOfFile:shuttleAltConfigFile];
-        id jsonAlt = [NSJSONSerialization JSONObjectWithData:dataAlt options:NSJSONReadingMutableContainers error:nil];
-        shuttleHostsAlt = jsonAlt[@"hosts"];
-        [shuttleHosts addObjectsFromArray:shuttleHostsAlt];
+        NSMutableDictionary *alternate = [self readConfigurationAtPath:shuttleAltConfigFile error:&error];
+        if (!alternate) {
+            [self showConfigurationError:error];
+            return;
+        }
+        [shuttleHosts addObjectsFromArray:alternate[@"hosts"]];
     }
-    
+
+    // Apply configuration changes once. Do not undo changes made in System Settings on each click.
+    NSNumber *desired = json[@"launch_at_login"];
+    if (desired && ![desired isEqual:appliedLaunchAtLogin]) {
+        appliedLaunchAtLogin = desired;
+        if (![launchAtLoginController setEnabled:desired.boolValue error:&error]) {
+            NSString *message = error.localizedDescription;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self showError:@"Unable to change login item" details:message];
+            });
+        }
+    }
+
     // Should we merge ssh config hosts?
     BOOL showSshConfigHosts = YES;
     if ([[json allKeys] containsObject:(@"show_ssh_config_hosts")] && [json[@"show_ssh_config_hosts"] boolValue] == NO) {
@@ -273,7 +406,7 @@
             NSString* name = cfg[@"name"] ? cfg[@"name"] : key;
             
             // Ignore entries that contain wildcard characters
-            if ([name rangeOfString:@"*"].length != 0)
+            if ([key rangeOfCharacterFromSet:[NSCharacterSet characterSetWithCharactersInString:@"*?!["]].location != NSNotFound)
                 skipCurrent = YES;
             
             // Ignore entries that start with `.`
@@ -404,22 +537,14 @@
         NSDictionary* cfg = leafs[key];
         NSMenuItem* menuItem = [[NSMenuItem alloc] init];
         
-        //Get the command we are going to run in termainal
-        NSString *menuCmd = cfg[@"cmd"];
-        //Get the theme for this terminal session
-        NSString *termTheme = cfg[@"theme"];
-        //Get the name for the terminal session
-        NSString *termTitle = cfg[@"title"];
-        //Get the value of setting inTerminal
-        NSString *termWindow = cfg[@"inTerminal"];
-        //Get the menu name will will use this as the title if title is null.
         [self separatorSortRemoval:cfg[@"name"]];
         
-        //Place the terminal command, theme, and title into an comma delimited string
-        NSString *menuRepObj = [NSString stringWithFormat:@"%@¬_¬%@¬_¬%@¬_¬%@¬_¬%@", menuCmd, termTheme, termTitle, termWindow, menuName];
-        
+        // Keep structured data so commands and titles can contain any characters.
+        NSMutableDictionary *command = [cfg mutableCopy];
+        command[@"name"] = menuName;
         [menuItem setTitle:menuName];
-        [menuItem setRepresentedObject:menuRepObj];
+        [menuItem setRepresentedObject:command];
+        [menuItem setTarget:self];
         [menuItem setAction:@selector(openHost:)];
         [m insertItem:menuItem atIndex:pos++];
         if (addSeparator) {
@@ -463,190 +588,41 @@
     }
 }
 
-- (void) openHost:(NSMenuItem *) sender {
-    //NSLog(@"sender: %@", sender);
-    //NSLog(@"Command: %@",[sender representedObject]);
-    
-    NSString *errorMessage;
-    NSString *errorInfo;
-    
-    
-    //Place the comma delimited string of menu item settings into an array
-    NSArray *objectsFromJSON = [[sender representedObject] componentsSeparatedByString:(@"¬_¬")];
-    
-    //This is our command that will be run in the terminal window
-    NSString *escapedObject;
-    //The theme for the terminal window
-    NSString *terminalTheme;
-    //The title for the terminal window
-    NSString *terminalTitle;
-    //Are commands run in a new tab (default) a new terminal window (new), or in the current tab of the last used window (current).
-    NSString *terminalWindow;
-    
-    escapedObject = [objectsFromJSON objectAtIndex:0];
-    
-    //if terminalTheme is not set then check for a global setting.
-    if( [[objectsFromJSON objectAtIndex:1] isEqualToString:@"(null)"] ){
-        if(themePref == 0) {
-            if( [terminalPref isEqualToString:@"iterm"] ){
-                //we have no global theme and there is no theme in the command settings.
-                //Forcing the Default profile for iTerm and the basic profile for Terminal.app
-                terminalTheme = @"Default";
-            }else{
-                terminalTheme = @"basic";
-            }
-            //We have a global setting using this as the theme.
-        }else {
-            terminalTheme = themePref;
-        }
-        //we have command level theme override the Global default_theme settings.
-    }else{
-        terminalTheme = [objectsFromJSON objectAtIndex:1];
+- (void)openHost:(NSMenuItem *)sender
+{
+    NSDictionary *command = sender.representedObject;
+    NSString *text = command[@"cmd"];
+    NSString *theme = command[@"theme"] ?: themePref ?: ([terminalPref containsString:@"iterm"] ? @"Default" : @"Basic");
+    NSString *title = command[@"title"] ?: command[@"name"] ?: @"Shuttle";
+    NSString *mode = command[@"inTerminal"] ?: openInPref;
+    if (![@[@"tab", @"new", @"current", @"virtual"] containsObject:mode]) mode = @"tab";
+
+    if ([mode isEqual:@"virtual"]) {
+        NSString *path = [[NSBundle mainBundle] pathForResource:@"virtual-with-screen" ofType:@"scpt"];
+        [self runScript:path handler:@"scriptRun" parameters:@[text, title]];
+        return;
     }
-    
-    //Check if terminalTitle is null
-    if( [[objectsFromJSON objectAtIndex:2] isEqualToString:@"(null)"]){
-        //setting the empty title to that of the menu item.
-        terminalTitle = [objectsFromJSON objectAtIndex:4];
-    }else{
-        terminalTitle = [objectsFromJSON objectAtIndex:2];
+    NSURL *url = [self commandURL:text];
+    if (url) {
+        [[NSWorkspace sharedWorkspace] openURL:url];
+        return;
     }
-    
-    //Check if inTerminal is null if so then use the default settings of open_in
-    if( [[objectsFromJSON objectAtIndex:3] isEqualToString:@"(null)"]){
-        
-        //if open_in is not "tab" or "new" then force the default of "tab".
-        if( ![openInPref isEqualToString:@"tab"] && ![openInPref isEqualToString:@"new"]){
-            openInPref = @"tab";
+
+    NSString *prefix = @"terminal";
+    if ([terminalPref containsString:@"iterm"]) {
+        if (![@[@"stable", @"nightly"] containsObject:iTermVersionPref]) {
+            [self showError:@"Invalid iTerm version" details:@"Set iTerm_version to stable or nightly in the JSON configuration."];
+            return;
         }
-        //open_in was not empty or bad value we are passing the settings.
-        terminalWindow = openInPref;
-    }else{
-        //inTerminal is not null and overrides the default values of open_in
-        terminalWindow = [objectsFromJSON objectAtIndex:3];
-        if( ![terminalWindow isEqualToString:@"new"] && ![terminalWindow isEqualToString:@"current"] && ![terminalWindow isEqualToString:@"tab"] && ![terminalWindow isEqualToString:@"virtual"])
-        {
-            errorMessage = [NSString stringWithFormat:@"%@%@%@ %@",@"'",terminalWindow,@"'", NSLocalizedString(@"is not a valid value for inTerminal. Please fix this in the JSON file",nil)];
-            errorInfo = NSLocalizedString(@"bad \"inTerminal\":\"VALUE\" in the JSON settings",nil);
-            [self throwError:errorMessage additionalInfo:errorInfo continueOnErrorOption:NO];
-        }
+        prefix = [@"iTerm2-" stringByAppendingString:iTermVersionPref];
     }
-    
-    //Set Paths to iTerm Stable AppleScripts
-    NSString *iTermStableNewWindow =  [[NSBundle mainBundle] pathForResource:@"iTerm2-stable-new-window" ofType:@"scpt"];
-    NSString *iTermStableCurrentWindow = [[NSBundle mainBundle] pathForResource:@"iTerm2-stable-current-window" ofType:@"scpt"];
-    NSString *iTermStableNewTabDefault = [[NSBundle mainBundle] pathForResource:@"iTerm2-stable-new-tab-default" ofType:@"scpt"];
-    
-    //Set Paths to iTerm Nightly AppleScripts
-    NSString *iTerm2NightlyNewWindow =  [[NSBundle mainBundle] pathForResource:@"iTerm2-nightly-new-window" ofType:@"scpt"];
-    NSString *iTerm2NightlyCurrentWindow = [[NSBundle mainBundle] pathForResource:@"iTerm2-nightly-current-window" ofType:@"scpt"];
-    NSString *iTerm2NightlyNewTabDefault = [[NSBundle mainBundle] pathForResource:@"iTerm2-nightly-new-tab-default" ofType:@"scpt"];
-    
-    //Set Paths to terminalScripts
-    NSString *terminalNewWindow =  [[NSBundle mainBundle] pathForResource:@"terminal-new-window" ofType:@"scpt"];
-    NSString *terminalCurrentWindow = [[NSBundle mainBundle] pathForResource:@"terminal-current-window" ofType:@"scpt"];
-    NSString *terminalNewTabDefault = [[NSBundle mainBundle] pathForResource:@"terminal-new-tab-default" ofType:@"scpt"];
-    
-    //Set Path to virtual with screen AppleScripts
-    NSString *terminalVirtualWithScreen = [[NSBundle mainBundle] pathForResource:@"virtual-with-screen" ofType:@"scpt"];
-    
-    //Set the name of the handler that we are passing parameters too in the apple script
-    NSString *handlerName = @"scriptRun";
-    
-    //script expects the following order: Command, Theme, Title unless its virtual which bypasses the url check and expects Command, Title
-    NSArray *passParameters;
-    NSURL *url;
-    if ( ![terminalWindow isEqualToString:@"virtual"] ) {
-        passParameters = @[escapedObject, terminalTheme, terminalTitle];
-        url = [NSURL URLWithString:escapedObject];
-    }
-    else {
-        passParameters = @[escapedObject, terminalTitle];
-    }
-    // Check if Url
-    if (url)
-        {
-            [[NSWorkspace sharedWorkspace] openURL:url];
-            
-        }
-    //If the JSON file is set to use iTerm
-    else if ( [terminalPref rangeOfString: @"iterm"].location !=NSNotFound ) {
-        
-        //If the JSON prefs for iTermVersion are not stable or nightly throw an error
-        if( ![iTermVersionPref isEqualToString: @"stable"] && ![iTermVersionPref isEqualToString:@"nightly"] ) {
-            
-            if( iTermVersionPref == 0 ) {
-                errorMessage = NSLocalizedString(@"\"iTerm_version\": \"VALUE\", is missing.\n\n\"VALUE\" can be:\n\"stable\" targeting new versions.\n\"nightly\" targeting nightly builds.\n\nPlease fix your shuttle JSON settings.\nSee readme.md on shuttle's github for help.",nil);
-                errorInfo = NSLocalizedString(@"Press Continue to try iTerm stable applescripts.\n              -->(not recommended)<--\nThis could fail if you have another version of iTerm installed.\n\nPlease fix the JSON settings.\nPress Quit to exit shuttle.",nil);
-                [self throwError:errorMessage additionalInfo:errorInfo continueOnErrorOption:YES];
-                iTermVersionPref = @"stable";
-                
-            }else{
-                errorMessage = [NSString stringWithFormat:@"%@%@%@ %@",@"'",iTermVersionPref,@"'", NSLocalizedString(@"is not a valid value for iTerm_version. Please fix this in the JSON file",nil)];
-                errorInfo = NSLocalizedString(@"bad \"iTerm_version\": \"VALUE\" in the JSON settings",nil);
-                [self throwError:errorMessage additionalInfo:errorInfo continueOnErrorOption:NO];
-            }
-        }
-        
-        if( [iTermVersionPref isEqualToString:@"stable"]) {
-            
-            //run the applescript that works with iTerm Stable
-            //if we are running in a new iTerm "Stable" Window
-            if ( [terminalWindow isEqualToString:@"new"] ) {
-                [self runScript:iTermStableNewWindow handler:handlerName parameters:passParameters];
-            }
-            //if we are running in the current iTerm "Stable" Window
-            if ( [terminalWindow isEqualToString:@"current"] ) {
-                [self runScript:iTermStableCurrentWindow handler:handlerName parameters:passParameters];
-            }
-            //we are using the default action of shuttle... The active window in a new tab
-            if ( [terminalWindow isEqualToString:@"tab"] ) {
-                [self runScript:iTermStableNewTabDefault handler:handlerName parameters:passParameters];
-            }
-            //don't spawn a terminal run the command in the background using screen
-            if ( [terminalWindow isEqualToString:@"virtual"] ) {
-                [self runScript:terminalVirtualWithScreen handler:handlerName parameters:passParameters];
-            }
-        }
-        //iTermVersion is not set to "stable" using applescripts Configured for Nightly
-        if( [iTermVersionPref isEqualToString:@"nightly"]) {
-            //if we are running in a new iTerm "Nightly" Window
-            if ( [terminalWindow isEqualToString:@"new"] ) {
-                [self runScript:iTerm2NightlyNewWindow handler:handlerName parameters:passParameters];
-            }
-            //if we are running in the current iTerm "Nightly" Window
-            if ( [terminalWindow isEqualToString:@"current"] ) {
-                [self runScript:iTerm2NightlyCurrentWindow handler:handlerName parameters:passParameters];
-            }
-            //we are using the default action of shuttle... The active window in a new tab
-            if ( [terminalWindow isEqualToString:@"tab"] ) {
-                [self runScript:iTerm2NightlyNewTabDefault handler:handlerName parameters:passParameters];
-            }
-            //don't spawn a terminal run the command in the background using screen
-            if ( [terminalWindow isEqualToString:@"virtual"] ) {
-                [self runScript:terminalVirtualWithScreen handler:handlerName parameters:passParameters];
-            }
-        }
-    }
-    //If JSON settings are set to use Terminal.app
-    else {
-        //if we are running in a new terminal Window
-        if ( [terminalWindow isEqualToString:@"new"] ) {
-            [self runScript:terminalNewWindow handler:handlerName parameters:passParameters];
-        }
-        //if we are running in the current terminal Window
-        if ( [terminalWindow isEqualToString:@"current"] ) {
-            [self runScript:terminalCurrentWindow handler:handlerName parameters:passParameters];
-        }
-        //we are using the default action of shuttle... The active window in a new tab
-        if ( [terminalWindow isEqualToString:@"tab"] ) {
-            [self runScript:terminalNewTabDefault handler:handlerName parameters:passParameters];
-        }
-        //don't spawn a terminal run the command in the background using screen
-        if ( [terminalWindow isEqualToString:@"virtual"] ) {
-            [self runScript:terminalVirtualWithScreen handler:handlerName parameters:passParameters];
-        }
-    }
+    NSString *suffix = @{@"new": @"new-window", @"tab": @"new-tab-default", @"current": @"current-window"}[mode];
+    NSString *resource = [NSString stringWithFormat:@"%@-%@", prefix, suffix];
+    NSString *path = [[NSBundle mainBundle] pathForResource:resource ofType:@"scpt"];
+    // The current-window handlers accept only the command; window/tab handlers
+    // also accept a profile and title.
+    NSArray *parameters = [mode isEqual:@"current"] ? @[text] : @[text, theme, title];
+    [self runScript:path handler:@"scriptRun" parameters:parameters];
 }
 
 - (void) runScript:(NSString *)scriptPath handler:(NSString*)handlerName parameters:(NSArray*)parametersInArray {
@@ -654,11 +630,19 @@
     //see http://goo.gl/olcpaX
     NSAppleScript           * appleScript;
     NSAppleEventDescriptor  * thisApplication, *containerEvent;
-    NSURL                   * pathURL = [NSURL fileURLWithPath:scriptPath];
+    if (!scriptPath.length) {
+        [self showError:@"Missing terminal script" details:@"Rebuild Shuttle from the current source tree."];
+        return;
+    }
+    NSURL *pathURL = [NSURL fileURLWithPath:scriptPath];
     
     NSDictionary * appleScriptCreationError = nil;
     appleScript = [[NSAppleScript alloc] initWithContentsOfURL:pathURL error:&appleScriptCreationError];
     
+    if (!appleScript) {
+        [self showScriptError:appleScriptCreationError];
+        return;
+    }
     if (handlerName && [handlerName length])
     {
         /* If we have a handlerName (and potentially parameters), we build
@@ -700,53 +684,37 @@
             [containerEvent setParamDescriptor:arguments forKeyword:keyDirectObject];
         }
         //Execute the event
-        [appleScript executeAppleEvent:containerEvent error:nil];
+        NSDictionary *executionError = nil;
+        if (![appleScript executeAppleEvent:containerEvent error:&executionError]) {
+            [self showScriptError:executionError];
+        }
     }
 }
 
 - (IBAction)showImportPanel:(id)sender {
     NSOpenPanel * openPanelObj	= [NSOpenPanel openPanel];
     NSInteger tvarNSInteger	= [openPanelObj runModal];
-    if(tvarNSInteger == NSOKButton){
+    if(tvarNSInteger == NSModalResponseOK){
         //Backup the current configuration
-        [[NSFileManager defaultManager] moveItemAtPath:shuttleConfigFile toPath: [NSHomeDirectory() stringByAppendingPathComponent:@".shuttle.json.backup"] error: nil];
+        [[NSFileManager defaultManager] moveItemAtPath:shuttleConfigFile toPath: [configurationHomeDirectory stringByAppendingPathComponent:@".shuttle.json.backup"] error: nil];
         
         NSURL * selectedFileUrl = [openPanelObj URL];
         //Import the selected file
         //NSLog(@"copy filename from %@ to %@",selectedFileUrl.path,shuttleConfigFile);
         [[NSFileManager defaultManager] copyItemAtPath:selectedFileUrl.path toPath:shuttleConfigFile error:nil];
         //Delete the old configuration file
-        [[NSFileManager defaultManager] removeItemAtPath:[NSHomeDirectory() stringByAppendingPathComponent:@".shuttle.json.backup"]  error: nil];
+        [[NSFileManager defaultManager] removeItemAtPath:[configurationHomeDirectory stringByAppendingPathComponent:@".shuttle.json.backup"]  error: nil];
     } else {
         return;
     }
     
 }
 
--(void) throwError:(NSString*)errorMessage additionalInfo:(NSString*)errorInfo continueOnErrorOption:(BOOL)continueOption {
-    NSAlert *alert = [[NSAlert alloc] init];
-    [alert setInformativeText:errorInfo];
-    [alert setMessageText:errorMessage];
-    [alert setAlertStyle:NSWarningAlertStyle];
-    
-    if (continueOption) {
-        [alert addButtonWithTitle:NSLocalizedString(@"Quit",nil)];
-        [alert addButtonWithTitle:NSLocalizedString(@"Continue",nil)];
-        
-    }else{
-        [alert addButtonWithTitle:NSLocalizedString(@"Quit",nil)];
-    }
-    
-    if ([alert runModal] == NSAlertFirstButtonReturn) {
-        [NSApp terminate:NSApp];
-    }
-}
-
 - (IBAction)showExportPanel:(id)sender {
     NSSavePanel * savePanelObj	= [NSSavePanel savePanel];
     //Display the Save Panel
     NSInteger result	= [savePanelObj runModal];
-    if (result == NSFileHandlingPanelOKButton) {
+    if (result == NSModalResponseOK) {
         NSURL *saveURL = [savePanelObj URL];
         // then copy a previous file to the new location
         [[NSFileManager defaultManager] copyItemAtPath:shuttleConfigFile toPath:saveURL.path error:nil];
@@ -755,44 +723,24 @@
 
 - (IBAction)configure:(id)sender {
     
-    //if the editor setting is omitted or contains 'default' open using the default editor.
-    if([editorPref rangeOfString:@"default"].location != NSNotFound) {
-        
-        [[NSWorkspace sharedWorkspace] openFile:shuttleConfigFile];
-    }
-    else{
-        //build the editor command
-        NSString *editorCommand = [NSString stringWithFormat:@"%@ %@", editorPref, shuttleConfigFile];
-        
-        //build the reprensented object. It's expecting menuCmd, termTheme, termTitle, termWindow, menuName
-        NSString *editorRepObj = [NSString stringWithFormat:@"%@¬_¬%@¬_¬%@¬_¬%@¬_¬%@", editorCommand, nil, @"Editing shuttle JSON", nil, nil];
-        
-        //make a menu item for the command selector(openHost:) runs in a new terminal window.
-        NSMenuItem *editorMenu = [[NSMenuItem alloc] initWithTitle:@"editJSONconfig" action:@selector(openHost:) keyEquivalent:(@"")];
-        
-        //set the command for the menu item
-        [editorMenu setRepresentedObject:editorRepObj];
-        
-        //open the JSON file in the terminal editor.
+    if (!editorPref.length || [editorPref caseInsensitiveCompare:@"default"] == NSOrderedSame) {
+        [[NSWorkspace sharedWorkspace] openURL:[NSURL fileURLWithPath:shuttleConfigFile]];
+    } else {
+        // Quote the configuration path without changing the user's editor command.
+        NSString *quotedPath = [shuttleConfigFile stringByReplacingOccurrencesOfString:@"'" withString:@"'\\''"];
+        NSString *editorCommand = [NSString stringWithFormat:@"%@ '%@'", editorPref, quotedPath];
+        NSMenuItem *editorMenu = [[NSMenuItem alloc] init];
+        editorMenu.representedObject = @{@"cmd": editorCommand, @"title": @"Editing Shuttle JSON", @"inTerminal": @"new"};
         [self openHost:editorMenu];
     }
 }
 
 - (IBAction)showAbout:(id)sender {
-    
-    //Call the windows controller
-    AboutWindowController *aboutWindow = [[AboutWindowController alloc] initWithWindowNibName:@"AboutWindowController"];
-    
-    //Set the window to stay on top
-    [aboutWindow.window makeKeyAndOrderFront:nil];
-    [aboutWindow.window setLevel:NSFloatingWindowLevel];
-    
-    //Show the window
-    [aboutWindow showWindow:self];
+    [NSApp activateIgnoringOtherApps:YES];
+    [NSApp orderFrontStandardAboutPanel:sender];
 }
 
 - (IBAction)quit:(id)sender {
-    [[NSStatusBar systemStatusBar] removeStatusItem:statusItem];
     [NSApp terminate:NSApp];
 }
 

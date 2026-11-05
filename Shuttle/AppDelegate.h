@@ -7,20 +7,15 @@
 #import "LaunchAtLoginController.h"
 
 @interface AppDelegate : NSObject <NSApplicationDelegate, NSMenuDelegate>{
-    IBOutlet NSMenu *menu;
-    IBOutlet NSArrayController *arrayController;
+    NSMenu *menu;
+    NSString *configurationHomeDirectory;
+    NSUInteger permanentMenuItemCount;
+    NSNumber *appliedLaunchAtLogin;
 
     NSImage *regularIcon;
-    NSImage *altIcon;
     
     NSStatusItem *statusItem;
     NSString *shuttleConfigFile;
-    
-    //This is for the JSON File
-    NSDate *configModified;
-    NSDate *configModified2;
-    NSDate *sshConfigUser;
-    NSDate *sshConfigSystem;
     
     //Global settings Pref in the JSON file.
     NSString *shuttleJSONPathPref; //Alternate path the JSON file
@@ -40,7 +35,6 @@
     
     //Used to gather ssh config settings
     NSMutableArray* shuttleHosts;
-    NSMutableArray* shuttleHostsAlt;
     NSMutableArray* ignoreHosts;
     NSMutableArray* ignoreKeywords;
     
@@ -48,6 +42,7 @@
     
 }
 
+- (instancetype)initWithHomeDirectory:(NSString *)homeDirectory;
 - (void)menuWillOpen:(NSMenu *)menu;
 
 @end

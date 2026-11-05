@@ -12,8 +12,75 @@ A simple shortcut menu for macOS
 
 ## Installation
 
-1. Download [Shuttle](http://fitztrev.github.io/shuttle/)
-2. Copy to Applications
+This branch modernizes Shuttle for Apple silicon, with native `arm64` and
+universal (`arm64` + `x86_64`) builds. It requires **macOS 13 or later** and the
+full Xcode application to build. Use the newest Xcode compatible with your Mac.
+The historical upstream downloads linked above may contain Intel-only builds.
+
+On an Apple silicon Mac, build the native app:
+
+```bash
+bash scripts/build-macos.sh arm64
+```
+
+Quit any older Shuttle instance, then copy
+`build/arm64/Build/Products/Release/Shuttle.app` to `/Applications` and open it.
+Your existing `~/.shuttle.json`, alternate JSON file, and SSH menu configuration
+continue to work. Custom paths in `~/.shuttle.path` and `~/.shuttle-alt.path`
+support `~/` and spaces; restart Shuttle after changing a path file.
+
+For both Apple silicon and Intel Macs:
+
+```bash
+bash scripts/build-macos.sh universal
+```
+
+Both commands verify the requested executable architectures using `lipo`, sign
+the app, verify its signature, and create a ZIP in `build/arm64` or
+`build/universal`. The default signature is ad-hoc for local use; downloaded CI
+artifacts are also ad-hoc signed and are **not notarized distribution releases**.
+To distribute publicly, set `SHUTTLE_SIGN_IDENTITY` to your Developer ID
+Application identity and submit the resulting app to Apple's notarization
+service before distribution.
+
+You can also open `Shuttle.xcodeproj` and run the shared **Shuttle** scheme.
+Release uses Xcode's standard architectures; Debug uses the host architecture.
+
+To check an installed copy:
+
+```bash
+lipo -archs /Applications/Shuttle.app/Contents/MacOS/Shuttle
+```
+
+On Apple silicon the output must include `arm64`. Activity Monitor's **Kind**
+column should show **Apple** while Shuttle is running. A native build does not
+need Rosetta. See Apple's [universal binary documentation](https://developer.apple.com/documentation/apple-silicon/building-a-universal-macos-binary)
+and [Rosetta support information](https://support.apple.com/en-ie/102527).
+
+On first use, allow Shuttle to control Terminal or iTerm under **System Settings
+→ Privacy & Security → Automation**. Terminal's `open_in: "tab"` mode also uses
+System Events and requires **Accessibility** permission. `open_in: "new"` avoids
+that extra permission. `launch_at_login` uses `SMAppService`; copy Shuttle to
+`/Applications` before enabling it, and approve it in **General → Login Items**
+if macOS requests approval. Remove an old Shuttle entry there if it points to
+an obsolete copy of the application.
+
+## Validation
+
+```bash
+bash scripts/test-macos.sh
+```
+
+Native tests cover programmatic menu startup, existing and invalid JSON files,
+configuration recovery, alternate file reloads, SSH includes, command/URL
+detection, and script argument handling. Tests use temporary files and intercept
+terminal execution, so no configured command runs and no login item is changed.
+
+GitHub Actions builds and checks both architecture variants on `macos-latest`,
+runs the native tests, and uploads ZIP artifacts. The workflow reports the actual
+runner OS and Xcode versions. A successful build on an older runner is not a
+runtime certification for macOS 27.2; menu display, Terminal/iTerm automation,
+permissions, and login startup still need to be checked on that macOS version.
 
 ## Help
 See the [Wiki](https://github.com/fitztrev/shuttle/wiki) pages. 
