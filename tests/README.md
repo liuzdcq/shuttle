@@ -6,6 +6,13 @@ The runner uses an isolated temporary home directory, never registers a login
 item, and intercepts AppleScript execution. Existing `.shuttle.json` and `.ssh`
 fixtures remain useful for manual checks.
 
+The test script also compiles the production Terminal scripts and runs
+`TerminalAppearanceTests.applescript` against their appearance handler with fake
+Terminal operations. It checks missing profiles, rejected settings, omitted and
+valid themes, title failures, and authorization failures without opening Terminal
+or running a connection command. Native tests also check that profile errors do
+not display unrelated Accessibility guidance.
+
 Before marking a macOS version supported, test the built app on that version:
 
 1. Verify `lipo -archs` includes `arm64` and Activity Monitor reports **Apple**.

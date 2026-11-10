@@ -20,8 +20,6 @@ on CommandRun(withCmd, withTheme, theTitle)
 			--if you dont do this you will get two windows and the title wont be set
 			activate
 			set newTerm to do script withCmd in window 1
-			set newTerm's current settings to settings set withTheme
-			set custom title of front window to theTitle
 		else
 			--Terminal is running get the window count
 			set windowCount to (count every window)
@@ -30,7 +28,7 @@ on CommandRun(withCmd, withTheme, theTitle)
 				--run our script in a new window
 				reopen
 				activate
-				do script withCmd in selected tab of window 1
+				set newTerm to do script withCmd in selected tab of window 1
 			else
 				--Terminal is running and we have a window run in a new tab
 				reopen
@@ -42,11 +40,9 @@ on CommandRun(withCmd, withTheme, theTitle)
 					end tell
 				end tell
 				activate
-				do script withCmd in selected tab of front window
+				set newTerm to do script withCmd in selected tab of front window
 			end if
-			set current settings of selected tab of front window to settings set withTheme
-			set title displays custom title of front window to true
-			set custom title of selected tab of front window to theTitle
 		end if
 	end tell
+	my applyAppearance(newTerm, withTheme, theTitle, me)
 end CommandRun

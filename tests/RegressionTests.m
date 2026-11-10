@@ -9,6 +9,7 @@
 - (void)openHost:(NSMenuItem *)sender;
 - (NSURL *)commandURL:(NSString *)command;
 - (NSString *)expandedConfigurationPath:(NSString *)path;
+- (NSString *)scriptErrorDetails:(NSDictionary *)error;
 @end
 
 // Exercise command parameter handling without sending Apple events or running
@@ -78,6 +79,16 @@ int main(int argc, const char *argv[])
         Check([delegate commandURL:@"echo 'a b' | cat"] == nil, @"shell pipeline is not a URL");
         Check([[delegate commandURL:@"https://example.com/path"].scheme isEqual:@"https"], @"absolute URL remains supported");
 
+        NSString *profileError = @"Terminal cannot set settings set dark to settings set dark.";
+        NSString *details = [delegate scriptErrorDetails:@{NSAppleScriptErrorMessage: profileError, NSAppleScriptErrorNumber: @(-10006)}];
+        Check([details isEqual:profileError], @"profile failures do not suggest unrelated Accessibility permissions");
+        details = [delegate scriptErrorDetails:@{NSAppleScriptErrorMessage: @"Not authorized to send Apple events", NSAppleScriptErrorNumber: @(-1743)}];
+        Check([details containsString:@"Automation"] && ![details containsString:@"Accessibility"], @"Apple event denial shows only Automation guidance");
+        details = [delegate scriptErrorDetails:@{NSAppleScriptErrorMessage: @"Shuttle is not allowed assistive access", NSAppleScriptErrorNumber: @(-1719)}];
+        Check([details containsString:@"Accessibility"], @"actual assistive access errors show Accessibility guidance");
+        details = [delegate scriptErrorDetails:@{NSAppleScriptErrorMessage: @"Invalid index", NSAppleScriptErrorNumber: @(-1719)}];
+        Check([details isEqual:@"Invalid index"], @"generic invalid-index errors are not misclassified as permission errors");
+
         NSString *ssh = [temporary stringByAppendingPathComponent:@"ssh_config"];
         NSString *included = [temporary stringByAppendingPathComponent:@"extra.conf"];
         Write(ssh, @"Include *.conf\nInclude missing-*\nHost primary.example.com\n");
@@ -111,6 +122,8 @@ int main(int argc, const char *argv[])
         [delegate applicationDidFinishLaunching:nil];
         NSMenu *statusMenu = [delegate valueForKey:@"menu"];
         Check(statusMenu.numberOfItems == 5, @"startup builds the command and permanent menus without a nib");
+        [delegate openHost:[statusMenu itemAtIndex:0]];
+        Check([delegate.recordedParameters isEqual:@[@"top", @"", @"Host"]], @"commands without a theme preserve Terminal's default profile");
         NSString *alternate = [temporary stringByAppendingPathComponent:@".shuttle-alt.json"];
         Write(alternate, @"{\"hosts\":[{\"name\":\"Alternate\",\"cmd\":\"pwd\"}]}");
         [delegate menuWillOpen:statusMenu];
