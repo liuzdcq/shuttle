@@ -5,6 +5,9 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+- Preserve working Terminal connections when an optional theme or title cannot
+  be applied. Compile Terminal scripts from source during the Xcode build and
+  show permission guidance only for matching authorization errors.
 - Modern macOS branch: native arm64 and universal builds, macOS 13 minimum,
   verified build architectures and local signing, plus a shared Xcode scheme.
 - Replace legacy nib startup and login-item APIs with programmatic AppKit menus

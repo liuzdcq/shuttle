@@ -235,14 +235,24 @@
     [alert runModal];
 }
 
-- (void)showScriptError:(NSDictionary *)error
+- (NSString *)scriptErrorDetails:(NSDictionary *)error
 {
     NSString *details = error[NSAppleScriptErrorMessage] ?: @"The terminal script could not be loaded or executed.";
-    if ([error[NSAppleScriptErrorNumber] integerValue] == -1743) {
+    NSInteger code = [error[NSAppleScriptErrorNumber] integerValue];
+    if (code == -1743) {
         details = [details stringByAppendingString:@"\n\nAllow Shuttle to control Terminal or iTerm in System Settings > Privacy & Security > Automation."];
+    } else if (code == -25211 ||
+               [details localizedCaseInsensitiveContainsString:@"assistive access"] ||
+               [details localizedCaseInsensitiveContainsString:@"not allowed to send keystrokes"] ||
+               [details containsString:@"辅助访问"] || [details containsString:@"不允许发送按键"]) {
+        details = [details stringByAppendingString:@"\n\nTerminal's new-tab mode requires Shuttle in System Settings > Privacy & Security > Accessibility. You can use open_in: new without that permission."];
     }
-    details = [details stringByAppendingString:@"\n\nTerminal's new-tab mode also requires Shuttle in Privacy & Security > Accessibility. You can use open_in: new without that permission."];
-    [self showError:@"Unable to run terminal command" details:details];
+    return details;
+}
+
+- (void)showScriptError:(NSDictionary *)error
+{
+    [self showError:@"Unable to run terminal command" details:[self scriptErrorDetails:error]];
 }
 
 - (NSURL *)commandURL:(NSString *)command
@@ -592,7 +602,7 @@
 {
     NSDictionary *command = sender.representedObject;
     NSString *text = command[@"cmd"];
-    NSString *theme = command[@"theme"] ?: themePref ?: ([terminalPref containsString:@"iterm"] ? @"Default" : @"Basic");
+    NSString *theme = command[@"theme"] ?: themePref ?: ([terminalPref containsString:@"iterm"] ? @"Default" : @"");
     NSString *title = command[@"title"] ?: command[@"name"] ?: @"Shuttle";
     NSString *mode = command[@"inTerminal"] ?: openInPref;
     if (![@[@"tab", @"new", @"current", @"virtual"] containsObject:mode]) mode = @"tab";

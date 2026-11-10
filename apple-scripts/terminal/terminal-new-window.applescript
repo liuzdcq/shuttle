@@ -23,7 +23,6 @@ on CommandRun(withCmd, withTheme, theTitle)
 			set newTerm to do script withCmd
 		end if
 		activate
-		set newTerm's current settings to settings set withTheme
-		set custom title of front window to theTitle
 	end tell
+	my applyAppearance(newTerm, withTheme, theTitle, me)
 end CommandRun

@@ -82,6 +82,14 @@ runner OS and Xcode versions. A successful build on an older runner is not a
 runtime certification for macOS 27.2; menu display, Terminal/iTerm automation,
 permissions, and login startup still need to be checked on that macOS version.
 
+Terminal profiles configured with `default_theme` or a command's `theme` are
+optional appearance settings. When omitted, Shuttle keeps Terminal's current
+profile. If a named profile is missing or Terminal cannot apply it, the command
+continues with the current appearance; it is not rerun. Automation failures still
+produce an error, and permission guidance is shown only for the corresponding
+permission failure. Terminal scripts are compiled from their source during each
+affected Xcode build, rather than copied from historical bytecode.
+
 ## Help
 See the [Wiki](https://github.com/fitztrev/shuttle/wiki) pages. 
 

@@ -17,3 +17,9 @@ xcrun clang -fobjc-arc -mmacosx-version-min=13.0 \
     "$project_root/tests/RegressionTests.m" "$project_root/Shuttle/AppDelegate.m" \
     "$project_root/Shuttle/LaunchAtLoginController.m" -o "$test_directory/RegressionTests"
 "$test_directory/RegressionTests" "$project_root" "$test_directory"
+
+# Compile the exact source shipped by the app, then test optional appearance
+# failures through fake Terminal operations (no commands or Apple events).
+bash "$project_root/apple-scripts/compile-Terminal.sh" "$test_directory/terminal-scripts"
+/usr/bin/osascript "$project_root/tests/TerminalAppearanceTests.applescript" \
+    "$test_directory/terminal-scripts/terminal-new-window.scpt"

@@ -20,9 +20,6 @@
 		A12D9BF31BCF2C73004F52A6 /* iTerm2-nightly-current-window.scpt in Resources */ = {isa = PBXBuildFile; fileRef = A12D9BEA1BCF2C73004F52A6 /* iTerm2-nightly-current-window.scpt */; };
 		A12D9BF41BCF2C73004F52A6 /* iTerm2-nightly-new-tab-default.scpt in Resources */ = {isa = PBXBuildFile; fileRef = A12D9BEB1BCF2C73004F52A6 /* iTerm2-nightly-new-tab-default.scpt */; };
 		A12D9BF51BCF2C73004F52A6 /* iTerm2-nightly-new-window.scpt in Resources */ = {isa = PBXBuildFile; fileRef = A12D9BEC1BCF2C73004F52A6 /* iTerm2-nightly-new-window.scpt */; };
-		A12D9BF61BCF2C73004F52A6 /* terminal-current-window.scpt in Resources */ = {isa = PBXBuildFile; fileRef = A12D9BED1BCF2C73004F52A6 /* terminal-current-window.scpt */; };
-		A12D9BF71BCF2C73004F52A6 /* terminal-new-tab-default.scpt in Resources */ = {isa = PBXBuildFile; fileRef = A12D9BEE1BCF2C73004F52A6 /* terminal-new-tab-default.scpt */; };
-		A12D9BF81BCF2C73004F52A6 /* terminal-new-window.scpt in Resources */ = {isa = PBXBuildFile; fileRef = A12D9BEF1BCF2C73004F52A6 /* terminal-new-window.scpt */; };
 		A1B7B9DD1DB53ED200809327 /* Localizable.strings in Resources */ = {isa = PBXBuildFile; fileRef = A1B7B9DF1DB53ED200809327 /* Localizable.strings */; };
 		C149EBFE15D5214600B1F558 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C149EBFD15D5214600B1F558 /* Cocoa.framework */; };
 		C149EC0815D5214600B1F558 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = C149EC0615D5214600B1F558 /* InfoPlist.strings */; };
@@ -211,6 +208,7 @@
 				C149EBF515D5214600B1F558 /* Sources */,
 				C149EBF615D5214600B1F558 /* Frameworks */,
 				C149EBF715D5214600B1F558 /* Resources */,
+				B25000000000000000000003 /* Compile Terminal scripts */,
 			);
 			buildRules = (
 			);
@@ -256,7 +254,6 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A12D9BF61BCF2C73004F52A6 /* terminal-current-window.scpt in Resources */,
 				A12D9BF31BCF2C73004F52A6 /* iTerm2-nightly-current-window.scpt in Resources */,
 				A1B7B9DD1DB53ED200809327 /* Localizable.strings in Resources */,
 				A12D9BF51BCF2C73004F52A6 /* iTerm2-nightly-new-window.scpt in Resources */,
@@ -269,16 +266,38 @@
 				A124BA191D45572B00218F2F /* iTerm2-stable-current-window.scpt in Resources */,
 				A12D9BF41BCF2C73004F52A6 /* iTerm2-nightly-new-tab-default.scpt in Resources */,
 				C149EC0E15D5214600B1F558 /* Credits.rtf in Resources */,
-				A12D9BF71BCF2C73004F52A6 /* terminal-new-tab-default.scpt in Resources */,
 				A124BA1B1D45572B00218F2F /* iTerm2-stable-new-window.scpt in Resources */,
 				A124BA1A1D45572B00218F2F /* iTerm2-stable-new-tab-default.scpt in Resources */,
 				C159DC2815D5DE8000F5DE24 /* shuttle.icns in Resources */,
-				A12D9BF81BCF2C73004F52A6 /* terminal-new-window.scpt in Resources */,
 				7E74A7C61789CE2F0079E0D2 /* shuttle.default.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		B25000000000000000000003 /* Compile Terminal scripts */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = ();
+			inputPaths = (
+				"$(SRCROOT)/apple-scripts/compile-Terminal.sh",
+				"$(SRCROOT)/apple-scripts/terminal/terminal-common.applescript",
+				"$(SRCROOT)/apple-scripts/terminal/terminal-new-window.applescript",
+				"$(SRCROOT)/apple-scripts/terminal/terminal-new-tab-default.applescript",
+				"$(SRCROOT)/apple-scripts/terminal/terminal-current-window.applescript",
+			);
+			name = "Compile Terminal scripts";
+			outputPaths = (
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/terminal-new-window.scpt",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/terminal-new-tab-default.scpt",
+				"$(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/terminal-current-window.scpt",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "bash \"$SRCROOT/apple-scripts/compile-Terminal.sh\" \"$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		C149EBF515D5214600B1F558 /* Sources */ = {
@@ -453,6 +472,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				COMBINE_HIDPI_IMAGES = YES;
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
 				GCC_PREFIX_HEADER = "Shuttle/Shuttle-Prefix.pch";
@@ -471,6 +491,7 @@
 				CODE_SIGN_IDENTITY = "-";
 				CODE_SIGN_STYLE = Manual;
 				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				COMBINE_HIDPI_IMAGES = YES;
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
 				GCC_PREFIX_HEADER = "Shuttle/Shuttle-Prefix.pch";
